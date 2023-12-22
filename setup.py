@@ -14,4 +14,5 @@ setup(
     include_package_data=True,
     install_requires=['markdown'],
     entry_points={'console_scripts': ['clean-folder = clean_folder.clean:sorter']},
+    
 )

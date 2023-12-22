@@ -106,7 +106,8 @@ def post_processor(results_path, extensions_info):
             print(f"\t{item.name}")
 
 
-def sorter(folder_platform_path):
+def sorter():
+    folder_platform_path = sys.argv[1]
     extensions_info = collections.defaultdict(set)
     folder_path = pathlib.Path(folder_platform_path)
 
@@ -135,7 +136,6 @@ def sorter(folder_platform_path):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        raise RuntimeError(f"usage: {sys.argv[0]} folder_platform_path")
+    
 
-    sorter(sys.argv[1])
+    sorter()
