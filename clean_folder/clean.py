@@ -5,6 +5,7 @@ import pathlib
 import tempfile
 import datetime
 import collections
+from threading import Thread
 
 RESULTS_FOLDERS = ("images", "video", "documents", "audio", "archives")
 
@@ -25,61 +26,74 @@ def normalize(file_name: str) -> str:
 
     return file_name
 
-def process_dir(result_path, element, extensions_info):
-    res = False
 
-    if element.name not in RESULTS_FOLDERS:
-        folder_res = diver(result_path, element, extensions_info)
+class ProcessThread(Thread):
+    def __init__(self, result_path, element, extensions_info):
+        super().__init__()
+        self.result_path = result_path
+        self.element = element
+        self.extensions_info = extensions_info
 
-        if folder_res is False:
-            element.rmdir()
-
-        res |= folder_res
-
-    return res
-
-
-def process_file(result_path, element, extensions_info):
-
-    table = (
-        ('JPEG', 'PNG', 'JPG', 'SVG'),
-        ('AVI', 'MP4', 'MOV', 'MKV'),
-        ('DOC', 'DOCX', 'TXT', 'PDF', 'XLSX', 'PPTX'),
-        ('MP3', 'OGG', 'WAV', 'AMR'),
-        ('ZIP', 'GZ', 'TAR')
-    )
-
-    suffixes_dict = {
-        table[i][j]: RESULTS_FOLDERS[i]
-        for i in range(len(table))
-        for j in range(len(table[i]))
-    }
-
-    suffix = element.suffix[1:].upper()
-
-    known = suffixes_dict.get(suffix) is not None
-
-    extensions_info["known" if known else "unknown"].add(suffix)
-
-    if known:
-        dest_folder = suffixes_dict[suffix]
-        result_path /= dest_folder
-
-        if not result_path.is_dir():
-            result_path.mkdir()
-
-        if dest_folder == "archives":
-            result_path /= f"{normalize(element.stem)}"
-
-            shutil.unpack_archive(
-                str(element), str(result_path), element.suffix[1:].lower()
-            )
+    def run(self):
+        if self.element.is_dir():
+            self.process_dir()
         else:
-            result_path /= f"{normalize(element.stem)}{element.suffix}"
+            self.process_file()
 
-            shutil.copy(str(element), str(result_path))
+    def process_dir(self):
+        res = False
 
-    return True
+        if self.element.name not in RESULTS_FOLDERS:
+            folder_res = diver(self.result_path, self.element, self.extensions_info)
+
+            if folder_res is False:
+                self.element.rmdir()
+
+            res |= folder_res
+
+        return res
+
+    def process_file(self):
+
+        table = (
+            ('JPEG', 'PNG', 'JPG', 'SVG'),
+            ('AVI', 'MP4', 'MOV', 'MKV'),
+            ('DOC', 'DOCX', 'TXT', 'PDF', 'XLSX', 'PPTX'),
+            ('MP3', 'OGG', 'WAV', 'AMR'),
+            ('ZIP', 'GZ', 'TAR')
+        )
+
+        suffixes_dict = {
+            table[i][j]: RESULTS_FOLDERS[i]
+            for i in range(len(table))
+            for j in range(len(table[i]))
+        }
+
+        suffix = self.element.suffix[1:].upper()
+
+        known = suffixes_dict.get(suffix) is not None
+
+        self.extensions_info["known" if known else "unknown"].add(suffix)
+
+        if known:
+            dest_folder = suffixes_dict[suffix]
+            result_path = self.result_path / dest_folder
+
+            if not result_path.is_dir():
+                result_path.mkdir()
+
+            if dest_folder == "archives":
+                result_path /= f"{normalize(self.element.stem)}"
+
+                shutil.unpack_archive(
+                    str(self.element), str(result_path), self.element.suffix[1:].lower()
+                )
+            else:
+                result_path /= f"{normalize(self.element.stem)}{self.element.suffix}"
+
+                shutil.copy(str(self.element), str(result_path))
+
+        return True
 
 
 def diver(result_path, folder_path, extensions_info):
@@ -88,9 +102,16 @@ def diver(result_path, folder_path, extensions_info):
     if not any(folder_path.iterdir()):
         return res
 
+    threads = []
+
     for element in folder_path.iterdir():
-        processor = process_dir if element.is_dir() else process_file
-        res |= processor(result_path, element, extensions_info)
+        thread = ProcessThread(result_path, element, extensions_info)
+        thread.start()
+        threads.append(thread)
+        
+    for thread in threads:
+        thread.join()
+        res |= thread.process_dir() if thread.element.is_dir() else thread.process_file() 
 
     return res
 
@@ -136,6 +157,4 @@ def sorter():
 
 
 if __name__ == "__main__":
-    
-
     sorter()
